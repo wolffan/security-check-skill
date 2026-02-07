@@ -295,6 +295,31 @@ class SecurityScanner:
                 (r'marshal\.load\(', 'marshal.load() - code execution risk'),
                 (r'marshal\.loads\(', 'marshal.loads() - code execution risk'),
                 (r'verify=False', 'SSL verification bypass'),
+                # SQL Injection patterns
+                (r'\+\s*["\'].*["\'].*\+', 'String concatenation in SQL query - potential SQLi'),
+                (r'select.*where.*\+\s*[a-z_]+\s*\+', 'SELECT with string concatenation - potential SQLi'),
+                (r'execute\([^)]*\+\s*[a-z_]+', 'SQL execute with concatenation - potential SQLi'),
+                (r'query\(.*\+\s*[a-z_]+\s*\+', 'Query building with concatenation - potential SQLi'),
+                (r'cursor\.execute\([^)]*\+\s*', 'Cursor execute with concatenation - potential SQLi'),
+                (r'format\(.*%s.*\%.*\)', 'SQL query with format - potential SQLi if user input'),
+                # XSS patterns
+                (r'innerHTML\s*=\s*[^;]+(?!\.textContent)', 'Direct innerHTML assignment - potential XSS'),
+                (r'outerHTML\s*=\s*[^;]+(?!\.textContent)', 'Direct outerHTML assignment - potential XSS'),
+                (r'document\.write\([^)]*\+\s*[a-z_]+', 'document.write with concatenation - potential XSS'),
+                (r'eval\([^)]*\+\s*[a-z_]+', 'eval with user input - potential XSS'),
+                # Command injection patterns
+                (r'subprocess\.(run|call|Popen)\([^)]*\+\s*shell\s*=\s*True', 'User input in subprocess with shell=True - command injection'),
+                (r'os\.system\([^)]*\+\s*[a-z_]+\s*\+', 'User input in os.system() - command injection'),
+                # SSRF patterns
+                (r'urlopen\(.*\+\s*[a-z_]+', 'User input in urlopen - potential SSRF'),
+                (r'requests\.(get|post|put|delete)\([^)]*\+\s*[a-z_]+', 'User input in requests URL - potential SSRF'),
+                (r'fetch\([^)]*\+\s*[a-z_]+', 'User input in fetch URL - potential SSRF'),
+                (r'axios\.(get|post|put|delete)\([^)]*\+\s*[a-z_]+', 'User input in axios URL - potential SSRF'),
+                # SSTI patterns
+                (r'\.format\([^)]*\+\s*[a-z_]+\s*\+', 'Template format with user input - potential SSTI'),
+                (r'jinja2\.Template\(.*\+\s*[a-z_]+', 'Jinja2 template with user input - potential SSTI'),
+                (r'mako\.Template\(.*\+\s*[a-z_]+', 'Mako template with user input - potential SSTI'),
+                (r'render\(.*\+\s*[a-z_]+', 'Render with user input - potential SSTI'),
             ],
             'MEDIUM': [
                 (r'os\.system\(', 'os.system() usage'),
@@ -303,6 +328,12 @@ class SecurityScanner:
                 (r'open\([^)]*[\'"].*secret[\'"]', 'Secret in file'),
                 (r'open\([^)]*[\'"].*token[\'"]', 'Token in file'),
                 (r'open\([^)]*[\'"].*api_key[\'"]', 'API key in file'),
+                # SQL Injection (less severe patterns)
+                (r'query\s*=\s*["\'].*%s["\']', 'SQL query with %s placeholder - validate input'),
+                (r'query\s*=\s*["\'].*\?["\']', 'SQL query with ? placeholder - validate input'),
+                # XSS (less severe patterns)
+                (r'\.html\(.*\+\s*[a-z_]+', 'HTML rendering with concatenation - potential XSS'),
+                (r'document\.createTextNode', 'createTextNode usage - check for XSS'),
             ]
         }
 
@@ -314,12 +345,28 @@ class SecurityScanner:
                 (r'base64\s+-d\s+.*\|\s*(sh|bash)', 'base64 decode piped to shell - encoded execution'),
                 (r'rm\s+-rf\s+/', 'Root deletion command'),
                 (r'chmod\s+777', 'Insecure permissions'),
+                # Command injection in shell
+                (r'\$[a-z_]+\s*\|\s*sh', 'Variable piped to shell - command injection'),
+                (r'eval\s+\$[a-z_]+', 'eval with variable - command injection'),
+                (r'\$\([^)]*\$\w+\)', 'Command substitution with variable - command injection'),
+                (r'`[^`]*\$\w+`', 'Backtick with variable - command injection'),
+                (r'sh\s+-c.*\$[a-z_]+', 'sh -c with variable - command injection'),
+                # SSRF in shell
+                (r'curl\s+[^ ]*\$[a-z_]+', 'curl with variable URL - potential SSRF'),
+                (r'wget\s+[^ ]*\$[a-z_]+', 'wget with variable URL - potential SSRF'),
+                # SQLi in shell (rare but possible)
+                (r'mysql\s+-e.*\$[a-z_]+', 'MySQL query with variable - potential SQLi'),
+                (r'psql\s+-c.*\$[a-z_]+', 'PostgreSQL query with variable - potential SQLi'),
+                (r'sqlite3\s+.*\$[a-z_]+', 'SQLite query with variable - potential SQLi'),
             ],
             'MEDIUM': [
                 (r'eval\s+', 'eval in shell script'),
                 (r'export\s+.*password', 'Password in environment variable'),
                 (r'export\s+.*secret', 'Secret in environment variable'),
                 (r'export\s+.*token', 'Token in environment variable'),
+                # XSS in shell (HTML generation)
+                (r'echo.*<[^>]*\$[a-z_]+', 'HTML echo with variable - potential XSS'),
+                (r'cat.*<[^>]*>.*\$[a-z_]+', 'HTML generation with variable - potential XSS'),
             ]
         }
 
