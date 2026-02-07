@@ -320,6 +320,38 @@ class SecurityScanner:
                 (r'jinja2\.Template\(.*\+\s*[a-z_]+', 'Jinja2 template with user input - potential SSTI'),
                 (r'mako\.Template\(.*\+\s*[a-z_]+', 'Mako template with user input - potential SSTI'),
                 (r'render\(.*\+\s*[a-z_]+', 'Render with user input - potential SSTI'),
+                # Weak cryptography
+                (r'Crypt::DES\b', 'DES cipher - weak encryption'),
+                (r'Crypt::TripleDES\b', 'Triple DES cipher - weak encryption'),
+                (r'crypt\.des3\b', 'DES3 cipher - weak encryption'),
+                (r'mcrypt\.des\b', 'DES cipher - weak encryption'),
+                (r'RC4\b', 'RC4 cipher - weak encryption'),
+                (r'arcfour\b', 'RC4 cipher - weak encryption'),
+                (r'arcfour128\b', 'RC4 cipher - weak encryption'),
+                (r'mode.*ECB', 'ECB mode - weak block cipher mode'),
+                (r'cipher.*ECB', 'ECB mode - weak block cipher mode'),
+                (r'AES.*ECB', 'AES in ECB mode - weak mode'),
+                (r'from.*crypt.*import', 'Import from crypt module - may use weak algorithms'),
+                (r'from.*Crypt.*import.*DES', 'Importing DES cipher - weak encryption'),
+                (r'from.*Crypt.*import.*TripleDES', 'Importing Triple DES cipher - weak encryption'),
+                (r'from.*pycryptodome\.cipher.*import.*DES', 'Importing DES from pycryptodome - weak encryption'),
+                (r'from.*pycryptodome\.cipher.*import.*ARC4', 'Importing ARC4 from pycryptodome - weak encryption'),
+                (r'pycryptodome\.cipher\.DES\b', 'DES cipher from pycryptodome - weak encryption'),
+                (r'pycryptodome\.cipher\.ARC4\b', 'ARC4 cipher from pycryptodome - weak encryption'),
+                (r'pycryptodome\.MODE_ECB', 'ECB mode from pycryptodome - weak mode'),
+                # PII logging
+                (r'log\([^)]*password', 'Logging password - PII exposure'),
+                (r'log\([^)]*secret', 'Logging secret - PII exposure'),
+                (r'log\([^)]*token', 'Logging token - PII exposure'),
+                (r'log\([^)]*api[_-]?key', 'Logging API key - PII exposure'),
+                (r'print\([^)]*password', 'Printing password - PII exposure'),
+                (r'print\([^)]*secret', 'Printing secret - PII exposure'),
+                (r'print\([^)]*token', 'Printing token - PII exposure'),
+                (r'print\([^)]*api[_-]?key', 'Printing API key - PII exposure'),
+                (r'console\.log\([^)]*password', 'Console logging password - PII exposure'),
+                (r'console\.log\([^)]*secret', 'Console logging secret - PII exposure'),
+                (r'console\.log\([^)]*token', 'Console logging token - PII exposure'),
+                (r'console\.log\([^)]*api[_-]?key', 'Console logging API key - PII exposure'),
             ],
             'MEDIUM': [
                 (r'os\.system\(', 'os.system() usage'),
@@ -334,6 +366,10 @@ class SecurityScanner:
                 # XSS (less severe patterns)
                 (r'\.html\(.*\+\s*[a-z_]+', 'HTML rendering with concatenation - potential XSS'),
                 (r'document\.createTextNode', 'createTextNode usage - check for XSS'),
+                # PII in configuration
+                (r'password\s*[=:]\s*[\'"]', 'Password in config file'),
+                (r'secret\s*[=:]\s*[\'"]', 'Secret in config file'),
+                (r'token\s*[=:]\s*[\'"]', 'Token in config file'),
             ]
         }
 
