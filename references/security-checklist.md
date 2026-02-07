@@ -270,3 +270,97 @@ For skills with security issues:
 - NIST Cybersecurity Framework
 - Prompt Injection Mitigation Strategies
 - Secure Coding Practices
+
+---
+
+## Future Enhancements & Inspiration
+
+### External References
+
+**Gemini CLI Security Extension**
+- Repository: https://github.com/gemini-cli-extensions/security
+- Purpose: AI-powered security analysis for code changes and pull requests
+- License: Apache 2.0
+
+### Potential Enhancements
+
+Based on the Gemini CLI Security Extension, consider adding the following features to the security-check skill:
+
+#### High Priority (Easy Integration)
+
+1. **Expand Vulnerability Categories**
+   - **Injection Vulnerabilities**: Add patterns for XSS, SQLi, command injection, SSRF, SSTI
+   - **Weak Cryptography**: Detect DES, Triple DES, RC4, ECB mode in block ciphers
+   - **PII Handling**: Flag logging of sensitive information (passwords, API keys, tokens)
+   - **Insecure Deserialization**: Detect unsafe pickle.loads() or JSON loads from untrusted sources
+
+2. **Enhanced Secret Detection**
+   - Expand beyond simple patterns to include encoding tricks
+   - Add detection for symmetric encryption keys embedded in code
+   - Detect session tokens and authentication cookies in code
+
+#### Medium Priority (Requires Enhancement)
+
+3. **AI-Powered Analysis**
+   - Replace pure pattern matching with LLM-enhanced detection
+   - Use context-aware analysis to reduce false positives
+   - Provide intelligent, actionable recommendations (not just patterns)
+
+4. **GitHub Actions Workflows**
+   - Create pre-built workflows for automated security checks
+   - Add example `.github/workflows/security-check.yml` templates
+   - Support both "fail on HIGH" and "strict mode" (fail on HIGH + MEDIUM)
+
+5. **Benchmarking Framework**
+   - Create test dataset with known vulnerabilities
+   - Measure precision and recall of scanner
+   - Target: >90% precision, >90% recall (similar to Gemini CLI Security)
+
+#### Low Priority (Future Enhancement)
+
+6. **Dependency Scanning Integration**
+   - Integrate OSV-Scanner for known vulnerabilities in dependencies
+   - Or enhance existing npm audit / pip-audit integration
+   - Aggregate vulnerability reports from multiple sources
+
+7. **PR-Focused Analysis**
+   - Scan only changed files in pull requests
+   - Compare code changes against known vulnerability patterns
+   - Provide context-aware analysis of modifications
+
+8. **Authentication Checks**
+   - Detect weak session tokens (predictable, low entropy)
+   - Flag insecure password reset mechanisms
+   - Check for authentication bypass patterns
+
+### Comparison: Current vs. Potential
+
+| Feature | Current (security-check) | Potential (inspired by Gemini CLI) |
+|---------|------------------------|-------------------------------------|
+| **Analysis Method** | Pattern matching (regex) | AI-powered (LLM) + pattern matching |
+| **Scope** | Prompt injection, secrets, file access | Injection types, weak crypto, PII, auth issues |
+| **Dependency Scanning** | npm audit / pip-audit (manual) | OSV-Scanner integration (automated) |
+| **GitHub Integration** | Basic workflows | Pre-built, tested workflows |
+| **Benchmarking** | None | Precision/recall metrics |
+| **Focus** | Skills for Clawdbot | Code changes, PRs, repositories |
+| **Exit Codes** | 0=PASS, 1=WARN, 2=FAIL | Same, with severity levels |
+
+### Action Items
+
+- [ ] **Phase 1: Expand Patterns** - Add injection types, weak crypto, PII handling
+- [ ] **Phase 2: AI Integration** - Evaluate LLM-based analysis options
+- [ ] **Phase 3: Workflows** - Create pre-built GitHub Actions templates
+- [ ] **Phase 4: Benchmarking** - Build test dataset and measure performance
+- [ ] **Phase 5: Dependency Scanning** - Integrate OSV-Scanner or enhance existing
+
+### Notes
+
+- **Benchmark Dataset**: Consider using OpenSSF CVE Benchmark (https://github.com/ossf-cve-benchmark/ossf-cve-benchmark)
+- **OSV-Scanner**: https://github.com/google/osv-scanner - Cross-references dependencies with OSV.dev
+- **Target Performance**: 90% precision, 93% recall (Gemini CLI Security Extension achieved this)
+- **License Compatibility**: Gemini CLI Security Extension is Apache 2.0 (compatible with most open-source licenses)
+
+---
+
+**Last Updated:** February 7, 2026
+**Inspiration Source:** https://github.com/gemini-cli-extensions/security
