@@ -348,6 +348,19 @@ safety check
    - Mitigation techniques
    - Reporting templates
 
+3. **Scanner Usage Examples** (`references/scanner-usage-examples.md`)
+   - Real-world scanner output examples (clean, HIGH, MEDIUM, LOW)
+   - Exit code meanings for CI/CD integration
+   - Troubleshooting guide (encoding errors, missing files, false positives)
+   - Best practices for scanning skills
+
+4. **CI/CD Integration Guide** (`references/cicd-integration-guide.md`)
+   - GitHub Actions workflows (fail on HIGH, strict mode)
+   - GitLab CI pipelines (basic, auto-merge blocking)
+   - Pre-commit hooks (local protection)
+   - Exit code handling (0=PASS, 1=WARN, 2=FAIL)
+   - Best practices for CI/CD security
+
 ### Internal Security Docs
 
 Refer to workspace security documents:
@@ -424,5 +437,7 @@ When security issues are found:
 - **`scripts/scan_skill.py`** - Automated security scanner
 - **`references/security-checklist.md`** - Manual security checklist
 - **`references/prompt-injection-patterns.md`** - Prompt injection detection guide
+- **`references/scanner-usage-examples.md`** - Scanner output examples + troubleshooting
+- **`references/cicd-integration-guide.md`** - GitHub Actions, GitLab CI, pre-commit hooks
 
 Remember: Security is an ongoing process, not a one-time check. Regular audits and vigilance are essential to maintaining a secure Clawdbot environment.
