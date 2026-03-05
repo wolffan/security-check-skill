@@ -1,6 +1,6 @@
 ---
 name: security-check
-description: Security audit and inspection skill for Clawdbot skills. Use this when you need to check skills for security vulnerabilities before installation, perform regular security audits on installed skills, verify skill description matches actual behavior, scan for prompt injection attempts, check for hardcoded secrets or credentials, verify no malicious intent in skill code or documentation, review file access patterns for potential configuration or secrets exposure, or audit dependencies for known vulnerabilities. This skill provides automated scanning tools and manual security checklists for comprehensive skill security assessment.
+description: Security audit and inspection for Clawdbot skills before installation and for regular monitoring. Use when needing to check skills for security vulnerabilities, perform regular security audits on installed skills, verify skill descriptions match actual behavior, scan for prompt injection attempts, check for hardcoded secrets/credentials, verify no malicious intent in skill code or documentation, review file access patterns for configuration/secrets exposure, or audit dependencies for known vulnerabilities. Inputs: skill directories or skill packages. Outputs: security reports with severity levels (HIGH/MEDIUM/LOW), vulnerability assessments, and installation recommendations. Provides automated scanner (scripts/scan_skill.py) and manual checklists for comprehensive security assessment.
 license: Complete terms in LICENSE.txt
 ---
 
@@ -95,6 +95,268 @@ python3 scripts/scan_skill.py <skill-path>
    - Suspicious URLs (pastebin, raw GitHub links)
    - Sensitive information exposure
 
+4. **Supply Chain & Dependency Analysis** (NEW)
+   - Dependency download count validation
+   - Suspicious package name detection
+   - Pre/post install script analysis
+   - Lockfile integrity verification
+
+## Supply Chain Attack Detection (NEW PROTOCOL)
+
+Based on real-world supply chain attacks in crypto/blockchain sectors, these protocols detect malicious packages that steal credentials (AWS, Azure, GCP, Vercel) or exfiltrate data.
+
+### Critical: Pre-Clone Repository Vetting
+
+Before cloning any skill repository, run these checks. **Do not clone until all pass or you explicitly approve proceeding.**
+
+#### Repository Metadata Analysis
+
+```bash
+# GitHub API check (if GitHub)
+curl -s "https://api.github.com/repos/<owner>/<repo>"
+
+# Check for RED FLAGS:
+# - Repository age < 30 days
+# - < 10 commits total
+# - 0 stars + 0 forks but claimed as production
+# - Owner account created < 3 months ago
+# - No commit activity for months, suddenly active again
+```
+
+**RED FLAGS - BLOCK CLONE:**
+- Repo created < 30 days ago AND claims to be production code
+- < 10 commits total with professional description
+- 0 stars, 0 forks, but marketed as "widely used"
+- New owner account (< 3 months) with multiple "company projects"
+
+#### Package.json Dependency Analysis (CRITICAL)
+
+Before any `npm install`, read package.json first:
+
+```bash
+# Get all dependencies
+cat package.json | jq '.dependencies, .devDependencies, .optionalDependencies'
+
+# Check each package on NPM
+npm view <package-name> --json | jq '{name, version, downloads: {lastWeek, lastMonth, lastYear}, maintainers, homepage, repository, author, license, deprecated}'
+```
+
+**CRITICAL RED FLAGS - BLOCK INSTALL:**
+- Packages with **< 1,000 downloads total**
+- Packages with **last-week downloads < 10**
+- Packages with **no homepage or repository link**
+- Packages with **single maintainer who is not repo owner**
+- Packages with **non-standard or missing license**
+- **Typosquatting names** (e.g., `expresss` instead of `express`)
+- **Suspicious package names**: `loader`, `installer`, `setup`, `runner`, `writer`, `json-merge-tool`, `jsonify-core`
+
+**Suspicious pattern from real attack:**
+- Package `json-merge-tool` with 97 downloads in "professional" codebase
+- Immediately red-flagged as malicious supply chain component
+
+#### Script Analysis (package.json)
+
+```bash
+cat package.json | jq '.scripts'
+```
+
+**CRITICAL RED FLAGS - BLOCK INSTALL:**
+- **Pre/post install hooks** that run arbitrary commands
+- Scripts with `curl` or `wget` downloading from external URLs
+- Scripts executing binaries from node_modules
+- Scripts generating files in system directories
+
+**Real attack pattern:**
+```json
+{
+  "scripts": {
+    "postinstall": "node node_modules/writer.js"  // Suspicious utility file
+  }
+}
+```
+
+#### Lockfile Integrity Check
+
+```bash
+# npm lockfile (npm 7+)
+cat package-lock.json | jq -r '.packages[].integrity'
+
+# yarn lockfile
+grep -A 1 "resolved:" yarn.lock
+
+# pnpm lockfile
+grep -A 2 "integrity:" pnpm-lock.yaml
+```
+
+**RED FLAGS:**
+- Missing integrity hashes (tampered lockfile)
+- Unusual resolved URLs (not registry.npmjs.org)
+- Multiple versions of same package (dependency confusion)
+
+### Code Red Flag Detection (After Safe Clone)
+
+#### Environment Variable Access (CREDENTIAL THEFT VECTOR)
+
+```bash
+# Find files reading ALL env vars
+grep -r "process\.env\[" --include="*.js" --include="*.ts" .
+
+# Find credential scanning patterns
+grep -rE "(AWS_|AZURE_|GCP_|VERCEL_|DATABASE_|API_KEY|SECRET|PASSWORD|TOKEN)" --include="*.js" --include="*.ts" .
+
+# Check for exfiltration
+grep -rE "(fetch|axios|request|http\.get)" --include="*.js" -A 5 | grep -E "(process\.env|Buffer\.from|atob|btoa)"
+```
+
+**CRITICAL RED FLAGS - IMMEDIATE BLOCK:**
+- Files that read **ALL env vars**: `const env = process.env`
+- Files combining env vars with Base64 encoding/decoding
+- HTTP requests sending env vars to external endpoints
+- Code scanning for **AWS_, AZURE_, GCP_, VERCEL_** credentials specifically
+- Code searching `~/.aws`, `~/.config`, `~/.azure` for credentials
+
+**Real attack pattern:**
+```javascript
+// writer.js - malicious utility file
+const env = process.env;  // Reads ALL environment variables
+const ip = await getPublicIP();  // Gets user IP
+const payload = { env, ip, ua: navigator.userAgent };
+const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
+// Sends to external endpoint - credential theft + full fingerprint
+```
+
+#### Base64 Encoded Payloads
+
+```bash
+# Find suspicious Base64 strings (32+ chars)
+grep -rE "[A-Za-z0-9+/]{32,}={0,2}" --include="*.js" --include="*.ts" -n
+
+# Decode suspicious strings
+echo "<base64-string>" | base64 -d
+```
+
+**RED FLAGS:**
+- Base64 strings that decode to **URLs**
+- Base64 strings that decode to **shell commands or code**
+- Base64 strings that decode to **credential patterns**
+- Multiple encoding layers (Base64 + Unicode + hex)
+
+#### Network Exfiltration Detection
+
+```bash
+# Find all HTTP requests
+grep -rE "(fetch|axios|request|http\.(get|post)|https\.get|https\.post)" --include="*.js" --include="*.ts" -n
+
+# Find WebSocket connections
+grep -rE "(WebSocket|ws\.connect|new WebSocket)" --include="*.js" --include="*.ts" -n
+```
+
+**Analyze each request with context:**
+```bash
+grep -rE "(fetch|axios)" --include="*.js" -B 5 -A 5
+```
+
+**CRITICAL RED FLAGS:**
+- Requests to **non-HTTPS endpoints** (http:// not https://)
+- Requests to **unknown external domains** (not project's own API)
+- Requests sending **user data without explicit action**
+- Requests in **library/utility code** that shouldn't make network calls
+- Requests combining **multiple data sources** (user agent + IP + env vars)
+
+#### Suspicious File Patterns
+
+```bash
+# Find recently created files
+find . -name "*.js" -o -name "*.ts" | xargs ls -lt | head -20
+
+# Find executable .js/.ts files (NOT NORMAL)
+find . -perm /111 -type f -name "*.js" -o -name "*.ts"
+
+# Find shell shebangs in JS/TS files
+grep -r "#!/" --include="*.js" --include="*.ts"
+```
+
+**RED FLAGS:**
+- Execute permissions on .js/.ts files
+- Shell shebangs in JS/TS files
+- Files in unexpected locations (node_modules/.cache, .vscode/extensions)
+- Suspicious file names: `writer.js`, `loader.js`, `installer.js`, `setup.js`
+
+### NPM Audit Before Install (Non-Execution)
+
+```bash
+# Audit without installing
+npm audit --json --package-lock-only 2>/dev/null || npm audit --json
+
+# Check for known vulnerabilities
+npm audit --audit-level=high
+
+# Check for deprecated packages
+npm outdated --json 2>/dev/null | jq '.[] | select(.deprecated == true)'
+```
+
+**CRITICAL FINDINGS:**
+- High/critical severity vulnerabilities in dependencies
+- Deprecated packages with no replacement
+- Dependency chains with multiple vulnerabilities
+
+### Container/VM Isolation (If Proceeding Despite Red Flags)
+
+If any red flags found but user wants to proceed:
+
+**REQUIRE ISOLATED EXECUTION:**
+1. Docker container with network restrictions
+2. VM with no access to host credentials
+3. Separate user account with no sudo/cred access
+
+**Dockerfile template for safe execution:**
+```dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+# NETWORK ISOLATION: Block external requests during install
+RUN npm ci --ignore-scripts
+COPY . .
+# Run with restricted capabilities
+CMD ["node", "--no-network", "index.js"]
+```
+
+### Post-Install Verification
+
+After npm/yarn/pnpm install, verify:
+
+```bash
+# Check what was actually installed
+npm list --depth=0
+npm list --depth=1
+
+# Verify integrity of installed packages
+npm verify  # npm 7+
+
+# Check if postinstall hooks ran
+npm run env 2>&1 | grep -E "(npm_config_|INIT_CWD)"
+
+# Check for suspicious binaries created
+find node_modules/.bin -type f -executable
+```
+
+## Supply Chain Security Checklist (10-Point Pre-Install Verification)
+
+**Before ANY npm/yarn/pnpm install, confirm ALL 10:**
+
+1. ✓ Repository age > 30 days OR you explicitly trust the source
+2. ✓ All dependencies have > 1,000 downloads OR you've manually audited the package
+3. ✓ No packages with suspicious names (loader, installer, setup, writer, runner, json-merge-tool, jsonify-core)
+4. ✓ No pre/post install hooks that execute external code
+5. ✓ No files reading ALL env vars without clear, documented purpose
+6. ✓ No Base64-encoded suspicious strings (32+ chars) in code
+7. ✓ No HTTP requests to unknown external domains in library/utility code
+8. ✓ npm audit shows 0 high/critical vulnerabilities OR you explicitly accept risk
+9. ✓ Code will run in isolated environment (Docker/VM) OR you trust it fully
+10. ✓ No credentials (AWS, Azure, GCP, Vercel) in environment during execution
+
+**If ANY fail → BLOCK INSTALL until resolved or explicitly approved.**
+
 ## Manual Security Checklist
 
 Use the comprehensive checklist in `references/security-checklist.md` for manual reviews.
@@ -140,7 +402,7 @@ Use the comprehensive checklist in `references/security-checklist.md` for manual
 
 ### Prompt Injection Detection
 
-Read `references/prompt-injection-patterns.md` for comprehensive patterns.
+Read `examples/prompt-injection-patterns.md` for comprehensive patterns.
 
 **Key indicators:**
 - Instructions to ignore/discard context
@@ -221,6 +483,11 @@ aws_access_key_id="..."
 - Unauthorized file system access
 - Dangerous file operations (rm -rf, dd, etc.)
 - eval() or exec() with untrusted input
+- **NEW:** Dependencies with < 1,000 downloads and suspicious names
+- **NEW:** Files reading ALL environment variables without clear purpose
+- **NEW:** Base64-encoded payloads that decode to URLs/commands
+- **NEW:** HTTP requests to unknown external endpoints
+- **NEW:** Pre/post install hooks executing external code
 
 **Action:** Do not install. Report to skill author.
 
@@ -330,11 +597,55 @@ safety check
    - LOW: Note, monitor
 5. **Follow up** on resolved issues
 
+## Real-World Supply Chain Attack Case Study
+
+### Crypto/Blockchain Developer Targeting (February 2026)
+
+**Attack vector:** Malicious package disguised as legitimate tool in professional job codebase
+
+**How it unfolded:**
+1. **Legitimate-looking recruitment:** Real company, real recruiter, professional PDF briefing, detailed Figma
+2. **Suspicious repo structure:** Forced monorepo with unnatural backend/frontend separation for MVP
+3. **Red flag discovered:** Package named `json-merge-tool` with only **97 downloads**
+4. **Malicious entry point:** `writer.js` file designed to:
+   - Read **ALL environment variables** (`const env = process.env`)
+   - Get user's **public IP address**
+   - Combine env vars + IP + user agent
+   - Encode in **Base64** to evade detection
+   - Send to external endpoint for exfiltration
+5. **Targets:** Specifically scanned for **AWS, Azure, GCP, Vercel** credentials
+6. **Goal:** Drain wallets, steal cookies, exfiltrate cloud provider credentials
+
+**Lessons learned:**
+- ✅ **Always check download counts** before installing packages
+- ✅ **Investigate suspicious package names** in unexpected contexts
+- ✅ **Never run npm install** without auditing package.json first
+- ✅ **Be suspicious of "over-engineered" repos** for simple projects
+- ✅ **Scan for env var access** - it's a credential theft vector
+- ✅ **Decode Base64 strings** to find hidden payloads
+- ✅ **Check where network requests go** - external endpoints = red flag
+
+**What blocked this attack:**
+- Investigating the suspicious `json-merge-tool` package (97 downloads)
+- Reading `writer.js` before running npm install
+- Noticing the env var collection pattern
+- Decoding the Base64 payload to see the exfiltration endpoint
+
+**What would have happened if install ran:**
+- All cloud provider credentials stolen (AWS, Azure, GCP, Vercel)
+- Crypto wallets drained
+- Browser cookies stolen
+- Full system compromise via credential theft
+
+This is **exactly why** supply chain security protocols are critical for all code execution, not just production workloads.
+
 ## Reference Materials
 
 ### Essential Reading
 
 1. **Security Checklist** (`references/security-checklist.md`)
+2. **Supply Chain Security Checklist** (10-point verification above)
+3. **Real-World Attack Case Study** (this section)
    - Comprehensive security criteria
    - Command alignment verification
    - Secrets exposure checks
@@ -423,6 +734,27 @@ done
 - Add new security indicators to checklist
 - Improve scanner accuracy based on false positives/negatives
 - Update reference materials with latest security research
+- **NEW:** Monitor supply chain attack trends in crypto/web3/dev communities
+- **NEW:** Update package name blocklist with known malicious packages
+- **NEW:** Add Base64 pattern detection to automated scanner
+
+### Automated Scanner Enhancements (Planned)
+
+**Add to `scripts/scan_skill.py`:**
+1. Dependency download count validation
+2. Suspicious package name detection
+3. Pre/post install script pattern matching
+4. Environment variable access detection
+5. Base64 payload identification (32+ chars, decode and analyze)
+6. Network request endpoint validation
+7. Lockfile integrity verification
+8. Repository metadata analysis (if GitHub URL provided)
+
+**Exit codes for CI/CD:**
+- 0: PASS (no security issues)
+- 1: WARN (MEDIUM severity, manual review needed)
+- 2: FAIL (HIGH severity, block installation)
+- 3: CRITICAL (supply chain attack detected)
 
 ### Feedback Loop
 
@@ -431,13 +763,44 @@ When security issues are found:
 2. Add to detection rules
 3. Share with community
 4. Improve security posture overall
+5. **NEW:** Report malicious packages to npm registry
+6. **NEW:** Document real-world attacks for educational purposes
 
 ## Tools
 
-- **`scripts/scan_skill.py`** - Automated security scanner
+- **`scripts/scan_skill.py`** - Automated security scanner (planned enhancements for supply chain)
 - **`references/security-checklist.md`** - Manual security checklist
 - **`references/prompt-injection-patterns.md`** - Prompt injection detection guide
 - **`references/scanner-usage-examples.md`** - Scanner output examples + troubleshooting
 - **`references/cicd-integration-guide.md`** - GitHub Actions, GitLab CI, pre-commit hooks
+- **`references/supply-chain-attack-patterns.md`** (TODO) - Documented attack vectors and detection methods
 
-Remember: Security is an ongoing process, not a one-time check. Regular audits and vigilance are essential to maintaining a secure Clawdbot environment.
+## Quick Reference Commands (Supply Chain Security)
+
+```bash
+# Check package downloads
+npm view <package-name> --json | jq '{name, downloads: {lastWeek, lastMonth}}'
+
+# Check repo age and stats
+curl -s "https://api.github.com/repos/<owner>/<repo>"
+
+# NPM audit without install
+npm audit --json --package-lock-only
+
+# Find env var access
+grep -r "process\.env\[" --include="*.js" .
+
+# Find Base64 payloads
+grep -rE "[A-Za-z0-9+/]{32,}={0,2}" --include="*.js" -n
+
+# Decode Base64
+echo "<base64>" | base64 -d
+
+# Find network requests
+grep -rE "(fetch|axios)" --include="*.js" -B 3 -A 3
+
+# Check what was installed
+npm list --depth=0
+```
+
+Remember: Security is an ongoing process, not a one-time check. Regular audits and vigilance are essential to maintaining a secure Clawdbot environment. Supply chain attacks are increasingly sophisticated - always audit before installing.
